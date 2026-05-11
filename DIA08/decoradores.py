@@ -13,7 +13,6 @@ def cambiar_letras(tipo:str):
 operacion = cambiar_letras("may")
 operacion("Palabra")
 
-
 def decorar_saludo(funcion):
     def otra_funcion(palabra):
         print("Alo")

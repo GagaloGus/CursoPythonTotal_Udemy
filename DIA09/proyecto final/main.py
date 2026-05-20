@@ -1,43 +1,45 @@
-import shutil, timeit, os, re, datetime
+import shutil, time, os, re, datetime
 from pathlib import Path
 
 RUTA_DIR = "DIA09/proyecto final/Mi_Gran_Directorio"
 PATRON_N_SERIE = r"N[a-zA-Z]{3}-\d{5}"
 
-def imprimir_resultado():
-    fecha_hoy = datetime.datetime.now()
+def imprimir_resultado(dict_n_serie : dict, tiempo: float):
+    valores_aplanados = [elemento for sublista in dict_n_serie.values() for elemento in sublista]
+
+    string_n_serie = ""
+    for archivo, lista_n_serie in dict_n_serie.items():
+        string_n_serie += f"{archivo:15s} {" / ".join(lista_n_serie)}\n"
+
     print(f"""
 ----------------------------------------------------
-Fecha de búsqueda: {fecha_hoy.day}/{fecha_hoy.month}/{fecha_hoy.year}
+Fecha de búsqueda: {datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")}
 
 ARCHIVO		NRO. SERIE
 -------		----------
-texto1.txt	Nter-15496
-texto25.txt	Ngba-85235
-
-Números encontrados: 2
-Duración de la búsqueda: 1 segundos
+{string_n_serie}
+Números encontrados: {len(valores_aplanados)}
+Duración de la búsqueda: {tiempo:.5f} segundos
 ----------------------------------------------------
-
 """)
 
 
-def main():
+def buscar_numeros_serie() -> dict[str, list[str]]:
     numeros_encontrados = {}
 
     for carpeta, subcarpetas, archivos in os.walk(RUTA_DIR):
-
-        print(f"Carpeta-> {carpeta}")
-        print(f"Los archivos son:")
         for archivo in archivos:
-            print(f"\t{archivo}")
-            archivo_abrir = Path(carpeta, archivo)
-            patrones = re.findall(PATRON_N_SERIE,archivo_abrir.read_text())
+            patrones = re.findall(PATRON_N_SERIE, Path(carpeta, archivo).read_text())
             if len(patrones) > 0:
                 numeros_encontrados[archivo] = patrones
 
-    print(numeros_encontrados)
+    return numeros_encontrados
+
+def main():
+    tiempo_inicio = time.perf_counter()
+    n_serie = buscar_numeros_serie()
+    tiempo_fin = time.perf_counter()
+    imprimir_resultado(n_serie, tiempo_fin - tiempo_inicio)
 
 if __name__ == "__main__":
-    #main()
-    imprimir_resultado()
+    main()

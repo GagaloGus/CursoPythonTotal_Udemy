@@ -1,9 +1,12 @@
 import pygame, os, random, math
+from enemigos import Enemigo, Gato
+from bala import Bala
+from repartidor import Repartidor
+from interfaz import Interfaz
+from func import *
 
 # Constantes
 DIMENSIONES = (800,600)
-RUTA_IMAGENES = os.path.join(os.path.dirname(__file__), "img")
-RUTA_SONIDOS = os.path.join(os.path.dirname(__file__), "sounds")
 FPS_CAP = 60
 TIEMPO_SPAWN_BALA = 400
 TIEMPO_SPAWN_ENEMIGO = 500
@@ -12,8 +15,8 @@ DURACION_INVULNERABILIDAD = 1000
 MODO_DISPARO = 'enemigo'  # 'circulo': dispara en círculo | 'enemigo': dispara a enemigo más cercano
 MASTER_VOLUME = 0.8
 
-
 def main():
+    """Función principal que inicializa el juego y contiene el loop principal"""
     # Inicializar pygame
     pygame.init()
 
@@ -45,41 +48,22 @@ def main():
     fondo = pygame.transform.scale(fondo, DIMENSIONES)
 
     # Repartidor
-    repartidor_img = pygame.image.load(os.path.join(RUTA_IMAGENES, "repartidor.png"))
-    repartidor_img = pygame.transform.scale(repartidor_img, (80,80))
-    repartidor_coordenadas_x = 360
-    repartidor_coordenadas_y = 250
-    repartidor_coordenadas_cambio_x = 0
-    repartidor_coordenadas_cambio_y = 0
-    repartidor_vel = 7
-
-    # Enemigos
-    enemigo_img = pygame.image.load(os.path.join(RUTA_IMAGENES, "floppa-cube.png"))
-    enemigo_img = pygame.transform.scale(enemigo_img, (70,70))
-    enemigo_vel = 3
+    repartidor = Repartidor()
+    interfaz = Interfaz(DIMENSIONES)
 
     # Lista de enemigos
-    enemigos = []
+    enemigos: list[Enemigo] = []
     tiempo_ultimo_enemigo = 0
 
     # Balas
-    bala_img = pygame.image.load(os.path.join(RUTA_IMAGENES, "tomate.png"))
-    bala_img = pygame.transform.scale(bala_img, (36, 36))
-    balas = []  # Lista de balas activas: [{"x": x, "y": y, "vx": vx, "vy": vy}, ...]
-    bala_vel = 5
+    balas: list[Bala] = []  # Lista de balas activas
     tiempo_ultimo_lanzamiento = 0
 
     # Sistema de vidas
-    vida_img = pygame.image.load(os.path.join(RUTA_IMAGENES, "heart.png"))
-    vida_img = pygame.transform.scale(vida_img, (40, 40))
     vidas = VIDAS_INICIALES
-    tiempo_ultimo_golpe = 0  # Para rastrear invulnerabilidad
-    es_invulnerable = False
 
     # Puntaje y tiempo
     puntaje = 0
-    fuente = pygame.font.SysFont(None, 36)  # Fuente para UI pequeña
-    fuente_grande = pygame.font.SysFont(None, 80)  # Fuente para "GAME OVER"
     tiempo_inicio = pygame.time.get_ticks()
 
     # Estados del juego
@@ -87,45 +71,30 @@ def main():
     ESTADO_TERMINADO = "terminado"
     estado_juego = ESTADO_JUGANDO
     tiempo_fin_juego = 0  # Se establece cuando el juego termina
-
-    def repartidor(coords: tuple):
-        """Dibuja al repartidor con efecto de parpadeo si está invulnerable"""
-        if es_invulnerable:
-            # Calcular tiempo transcurrido desde el último golpe
-            tiempo_transcurrido = tiempo_actual - tiempo_ultimo_golpe
-            # Crear efecto de parpadeo: alterna visibilidad cada INTERVALO_PARPADEO ms
-            if (tiempo_transcurrido // 100) % 2 == 0:
-                pantalla.blit(repartidor_img, coords)
-        else:
-            pantalla.blit(repartidor_img, coords)
+        
 
     def dibujar_enemigos():
         for enemigo in enemigos:
-            pantalla.blit(enemigo["img"], (enemigo["x"], enemigo["y"]))
+            enemigo.draw(pantalla)
 
-    def generar_enemigo(img=enemigo_img, vel=enemigo_vel):
+    def generar_enemigo():
         """Crea un nuevo enemigo en un borde aleatorio de la pantalla"""
         borde = random.choice(['top', 'bottom', 'left', 'right'])
 
         if borde == 'top':
-            x = random.randint(0, DIMENSIONES[0] - img.get_width())
-            y = -img.get_height()
+            x = random.randint(0, DIMENSIONES[0] - Gato.IMAGEN.get_width())
+            y = -Gato.IMAGEN.get_height()
         elif borde == 'bottom':
-            x = random.randint(0, DIMENSIONES[0] - img.get_width())
+            x = random.randint(0, DIMENSIONES[0] - Gato.IMAGEN.get_width())
             y = DIMENSIONES[1]
         elif borde == 'left':
-            x = -img.get_width()
-            y = random.randint(0, DIMENSIONES[1] - img.get_height())
+            x = -Gato.IMAGEN.get_width()
+            y = random.randint(0, DIMENSIONES[1] - Gato.IMAGEN.get_height())
         else:  # right
             x = DIMENSIONES[0]
-            y = random.randint(0, DIMENSIONES[1] - img.get_height())
+            y = random.randint(0, DIMENSIONES[1] - Gato.IMAGEN.get_height())
 
-        enemigo = {
-            "x": x,
-            "y": y,
-            "img": img,
-            "vel": vel
-        }
+        enemigo = Gato(x, y)
         enemigos.append(enemigo)
 
     def encontrar_enemigo_cercano(x_repartidor, y_repartidor):
@@ -137,8 +106,8 @@ def main():
         distancia_minima = float('inf')
 
         for enemigo in enemigos:
-            dx = x_repartidor - enemigo["x"]
-            dy = y_repartidor - enemigo["y"]
+            dx = x_repartidor - enemigo.center()[0]
+            dy = y_repartidor - enemigo.center()[1]
             distancia = math.sqrt(dx**2 + dy**2)
 
             if distancia < distancia_minima:
@@ -149,7 +118,7 @@ def main():
 
     def lanzar_bala(x_origen, y_origen, x_objetivo, y_objetivo):
         """Crea una bala dirigida hacia el objetivo.
-        Ahora x_origen/y_origen y x_objetivo/y_objetivo se interpretan como CENTROS (no top-left).
+        x_origen/y_origen y x_objetivo/y_objetivo se interpretan como CENTROS (no top-left).
         """
         # Calcular dirección hacia el objetivo (centros)
         dx = x_objetivo - x_origen
@@ -160,32 +129,28 @@ def main():
             return
 
         # Velocidad normalizada hacia el objetivo
-        vx = (dx / distancia) * bala_vel
-        vy = (dy / distancia) * bala_vel
+        vx = (dx / distancia)
+        vy = (dy / distancia)
 
         # Posicionar la bala centrada en el origen (centro del repartidor)
-        bala = {
-            "x": x_origen - bala_img.get_width() // 2,
-            "y": y_origen - bala_img.get_height() // 2,
-            "vx": vx,
-            "vy": vy
-        }
+        bala = Bala(
+            x_origen - Bala.IMAGEN.get_width() // 2,
+            y_origen - Bala.IMAGEN.get_height() // 2,
+            vx,
+            vy
+        )
         balas.append(bala)
         sonido_disparo.play()  # Reproducir sonido de disparo
 
     def actualizar_balas():
         """Mueve las balas y elimina las que salen de pantalla"""
-        balas_a_eliminar = []
+        balas_a_eliminar: list[int] = []
 
         for i, bala in enumerate(balas):
-            bala["x"] += bala["vx"]
-            bala["y"] += bala["vy"]
+            bala.update()
 
             # Verificar si la bala salió de pantalla
-            if (bala["x"] < -bala_img.get_width() or
-                bala["x"] > DIMENSIONES[0] or
-                bala["y"] < -bala_img.get_height() or
-                bala["y"] > DIMENSIONES[1]):
+            if bala.is_out_of_bounds(DIMENSIONES):
                 balas_a_eliminar.append(i)
 
         # Eliminar balas fuera de pantalla (en orden inverso para no mover índices)
@@ -195,75 +160,20 @@ def main():
     def dibujar_balas():
         """Dibuja todas las balas activas"""
         for bala in balas:
-            pantalla.blit(bala_img, (bala["x"], bala["y"]))
-
-    def dibujar_vidas():
-        """Dibuja las vidas en la esquina superior izquierda"""
-        for i in range(vidas):
-            pantalla.blit(vida_img, (10 + i * 50, 10))
-
-    def dibujar_puntaje():
-        """Dibuja el puntaje en la esquina superior derecha"""
-        texto_puntaje = fuente.render(f"Puntos: {puntaje}", True, (255, 255, 255))
-        pantalla.blit(texto_puntaje, (DIMENSIONES[0] - texto_puntaje.get_width() - 10, 10))
-
-    def calcular_tiempo_transcurrido(tiempo_desde):
-        """Calcula el tiempo transcurrido en formato M:SS"""
-        tiempo_ms = tiempo_desde - tiempo_desde
-        if estado_juego == ESTADO_JUGANDO:
-            tiempo_ms = tiempo_actual - tiempo_inicio
-        else:
-            tiempo_ms = tiempo_fin_juego - tiempo_inicio
-
-        segundos_totales = tiempo_ms // 1000
-        minutos = segundos_totales // 60
-        segundos = segundos_totales % 60
-        return f"{minutos}:{segundos:02d}"
-
-    def dibujar_cronometro():
-        """Dibuja el cronómetro en la parte superior central"""
-        tiempo_str = calcular_tiempo_transcurrido(tiempo_actual)
-        texto_tiempo = fuente.render(tiempo_str, True, (255, 255, 255))
-        x = (DIMENSIONES[0] - texto_tiempo.get_width()) // 2
-        pantalla.blit(texto_tiempo, (x, 10))
-
-    def dibujar_pantalla_fin():
-        """Dibuja la pantalla de fin de juego con puntaje y tiempo"""
-        # Fondo oscuro semi-transparente
-        fondo_oscuro = pygame.Surface(DIMENSIONES)
-        fondo_oscuro.set_alpha(128)
-        fondo_oscuro.fill((0, 0, 0))
-        pantalla.blit(fondo_oscuro, (0, 0))
-
-        # Texto "GAME OVER"
-        texto_game_over = fuente_grande.render("GAME OVER", True, (255, 0, 0))
-        x_game_over = (DIMENSIONES[0] - texto_game_over.get_width()) // 2
-        pantalla.blit(texto_game_over, (x_game_over, DIMENSIONES[1] // 2 - 100))
-
-        # Puntaje final
-        tiempo_str = calcular_tiempo_transcurrido(tiempo_actual)
-        texto_puntaje_final = fuente.render(f"Puntaje: {puntaje}", True, (255, 255, 255))
-        x_puntaje = (DIMENSIONES[0] - texto_puntaje_final.get_width()) // 2
-        pantalla.blit(texto_puntaje_final, (x_puntaje, DIMENSIONES[1] // 2 + 50))
-
-        # Tiempo final
-        texto_tiempo_final = fuente.render(f"Tiempo: {tiempo_str}", True, (255, 255, 255))
-        x_tiempo = (DIMENSIONES[0] - texto_tiempo_final.get_width()) // 2
-        pantalla.blit(texto_tiempo_final, (x_tiempo, DIMENSIONES[1] // 2 + 100))
+            bala.draw(pantalla)
 
     def detectar_colisiones_balas():
         """Detecta colisiones entre balas y enemigos, y elimina ambos si colisionan"""
         nonlocal puntaje
 
         enemigos_sobrevivientes = list.copy(enemigos)
-        balas_sobrevivientes = []
+        balas_sobrevivientes: list[Bala] = []
 
         # Utiliza pygame.Rect para detectar colisiones de manera más sencilla
         for bala in balas:
-            bala_rect = pygame.Rect(bala["x"], bala["y"], bala_img.get_width(), bala_img.get_height())
             colisiono = False
             for enemigo in enemigos_sobrevivientes:
-                if bala_rect.colliderect(pygame.Rect(enemigo["x"], enemigo["y"], enemigo["img"].get_width(), enemigo["img"].get_height())):
+                if bala.rect().colliderect(enemigo.rect()):
                     # Colisión detectada, eliminar ambos
                     enemigos_sobrevivientes.remove(enemigo)
                     colisiono = True
@@ -281,23 +191,14 @@ def main():
 
     def detectar_colision_repartidor():
         """Detecta si un enemigo colisiona con el repartidor"""
-        nonlocal vidas, es_invulnerable, tiempo_ultimo_golpe, estado_juego, tiempo_fin_juego
-
-        # Crear un rectángulo para el repartidor
-        repartidor_rect = pygame.Rect(
-            repartidor_coordenadas_x,
-            repartidor_coordenadas_y,
-            repartidor_img.get_width(),
-            repartidor_img.get_height()
-        )
+        nonlocal vidas, estado_juego, tiempo_fin_juego
 
         # Verificar colisión con cada enemigo
         for enemigo in enemigos:
-            if not es_invulnerable and repartidor_rect.colliderect(pygame.Rect(enemigo["x"], enemigo["y"], enemigo["img"].get_width(), enemigo["img"].get_height())):
+            if not repartidor.es_invulnerable and repartidor.rect().colliderect(enemigo.rect()):
                 vidas -= 1
                 sonido_vida_perdida.play()  # Reproducir sonido de vida perdida
-                es_invulnerable = True
-                tiempo_ultimo_golpe = tiempo_actual
+                repartidor.apply_invulnerability(tiempo_actual)
 
                 # Cambiar estado si no hay más vidas
                 if vidas == 0:
@@ -311,7 +212,7 @@ def main():
     FPS = FPS_CAP
 
     # Generar lista de ángulos y direcciones para disparo circular (8 direcciones)
-    num_direcciones = 16
+    num_direcciones = 4
     direcciones_circulares = []
     for i in range(num_direcciones):
         angulo = (2 * math.pi * i) / num_direcciones
@@ -330,38 +231,24 @@ def main():
             if evento.type == pygame.QUIT:
                 juego_activo = False
 
-            # Solo permitir entrada si el juego está jugando
-            if estado_juego == ESTADO_JUGANDO and evento.type == pygame.KEYDOWN:
-                if evento.key == pygame.K_LEFT:
-                    repartidor_coordenadas_cambio_x = -repartidor_vel
-                elif evento.key == pygame.K_RIGHT:
-                    repartidor_coordenadas_cambio_x = repartidor_vel
-                elif evento.key == pygame.K_UP:
-                    repartidor_coordenadas_cambio_y = -repartidor_vel
-                elif evento.key == pygame.K_DOWN:
-                    repartidor_coordenadas_cambio_y = repartidor_vel
-                elif evento.key == pygame.K_r:
-                    # Reiniciar la posición del repartidor
-                    repartidor_coordenadas_x = 360
-                    repartidor_coordenadas_y = 250
+            # Tecla pulsada
+            if evento.type == pygame.KEYDOWN:
+                if estado_juego == ESTADO_JUGANDO:
+                    if evento.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
+                        repartidor.handle_key_down(evento.key)
 
             # Tecla soltada
-            if estado_juego == ESTADO_JUGANDO and evento.type == pygame.KEYUP:
-                if evento.key in [pygame.K_LEFT, pygame.K_RIGHT]:
-                    repartidor_coordenadas_cambio_x = 0
-                if evento.key in [pygame.K_UP, pygame.K_DOWN]:
-                    repartidor_coordenadas_cambio_y = 0
+            if evento.type == pygame.KEYUP:
+                if estado_juego == ESTADO_JUGANDO:
+                    if evento.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
+                        repartidor.handle_key_up(evento.key)
 
         # Lógica de juego solo si está jugando
         if estado_juego == ESTADO_JUGANDO:
             # Movimiento del enemigo
+            x_objetivo_repartidor, y_objetivo_repartidor = repartidor.center()
             for enemigo in enemigos:
-                dx = repartidor_coordenadas_x - enemigo["x"]
-                dy = repartidor_coordenadas_y - enemigo["y"]
-                distancia = math.sqrt(dx**2 + dy**2)
-                if distancia > 0:
-                    enemigo["x"] += (dx / distancia) * enemigo["vel"]
-                    enemigo["y"] += (dy / distancia) * enemigo["vel"]
+                enemigo.move_towards(x_objetivo_repartidor, y_objetivo_repartidor)
 
             # Generar nuevo enemigo cada intervalo
             if tiempo_actual - tiempo_ultimo_enemigo >= TIEMPO_SPAWN_ENEMIGO:
@@ -371,22 +258,20 @@ def main():
             # Lanzar balas cada intervalo
             if tiempo_actual - tiempo_ultimo_lanzamiento >= TIEMPO_SPAWN_BALA:
                 # Origen centrado del repartidor
-                x_origen_centro = repartidor_coordenadas_x + repartidor_img.get_width() // 2
-                y_origen_centro = repartidor_coordenadas_y + repartidor_img.get_height() // 2
+                x_origen_centro, y_origen_centro = repartidor.center()
 
                 if MODO_DISPARO == 'circulo':
                     # Modo circular: disparar en 8 direcciones usando la lista de direcciones
                     for direccion in direcciones_circulares:
-                        x_objetivo = x_origen_centro + direccion["vx"] * bala_vel * 10
-                        y_objetivo = y_origen_centro + direccion["vy"] * bala_vel * 10
+                        x_objetivo = x_origen_centro + direccion["vx"] * Bala.VELOCIDAD * 10
+                        y_objetivo = y_origen_centro + direccion["vy"] * Bala.VELOCIDAD * 10
                         lanzar_bala(x_origen_centro, y_origen_centro, x_objetivo, y_objetivo)
 
                 elif MODO_DISPARO == 'enemigo':
                     # Modo enemigo cercano: disparar al enemigo más cercano (usar centros)
                     enemigo_objetivo = encontrar_enemigo_cercano(x_origen_centro, y_origen_centro)
                     if enemigo_objetivo is not None:
-                        x_objetivo = enemigo_objetivo["x"] + enemigo_objetivo["img"].get_width() // 2
-                        y_objetivo = enemigo_objetivo["y"] + enemigo_objetivo["img"].get_height() // 2
+                        x_objetivo, y_objetivo = enemigo_objetivo.center()
                         lanzar_bala(x_origen_centro, y_origen_centro, x_objetivo, y_objetivo)
 
                 tiempo_ultimo_lanzamiento = tiempo_actual
@@ -395,22 +280,10 @@ def main():
             actualizar_balas()
 
             # Verificar estado de invulnerabilidad
-            if es_invulnerable and tiempo_actual - tiempo_ultimo_golpe >= DURACION_INVULNERABILIDAD:
-                es_invulnerable = False
+            repartidor.check_invulnerability(tiempo_actual, DURACION_INVULNERABILIDAD)
 
             # Mover al repartidor
-            repartidor_coordenadas_x += repartidor_coordenadas_cambio_x
-            repartidor_coordenadas_y += repartidor_coordenadas_cambio_y
-
-            # Evitar que el repartidor salga de la pantalla
-            if repartidor_coordenadas_x < 0:
-                repartidor_coordenadas_x = 0
-            if repartidor_coordenadas_y < 0:
-                repartidor_coordenadas_y = 0
-            if repartidor_coordenadas_x > DIMENSIONES[0] - repartidor_img.get_width():
-                repartidor_coordenadas_x = DIMENSIONES[0] - repartidor_img.get_width()
-            if repartidor_coordenadas_y > DIMENSIONES[1] - repartidor_img.get_height():
-                repartidor_coordenadas_y = DIMENSIONES[1] - repartidor_img.get_height()
+            repartidor.update(DIMENSIONES)
 
             # Detectar colisiones
             detectar_colisiones_balas()
@@ -422,7 +295,7 @@ def main():
         pantalla.blit(fondo, (0,0))
 
         # Dibujar al repartidor
-        repartidor((repartidor_coordenadas_x, repartidor_coordenadas_y))
+        repartidor.draw(pantalla, tiempo_actual)
 
         # Dibujar al enemigo
         dibujar_enemigos()
@@ -430,25 +303,18 @@ def main():
         # Dibujar balas
         dibujar_balas()
 
-        # Dibujar vidas
-        dibujar_vidas()
-
-        # Dibujar puntaje
-        dibujar_puntaje()
-
-        # Dibujar cronómetro
-        dibujar_cronometro()
+        # Dibujar interfaz
+        interfaz.dibujar_interfaz_juego(pantalla, vidas, puntaje, tiempo_actual, tiempo_inicio, estado_juego, tiempo_fin_juego, ESTADO_TERMINADO)
 
         # Si el juego terminó, mostrar pantalla de fin
         if estado_juego == ESTADO_TERMINADO:
-            dibujar_pantalla_fin()
+            interfaz.dibujar_pantalla_fin(pantalla, puntaje, tiempo_actual, tiempo_inicio, tiempo_fin_juego, estado_juego, ESTADO_TERMINADO)
 
         # Actualizar la pantalla
         pygame.display.update()
 
         # Controlar el frame rate
         reloj.tick(FPS)
-
 
 if __name__ == "__main__":
     main()

@@ -1,19 +1,11 @@
 import pygame, os, random, math
-from enemigos import Enemigo, Gato
+from enemigos import Enemigo, Gato, Perro
 from bala import Bala
+from powerup import PowerUp
 from repartidor import Repartidor
 from interfaz import Interfaz
+import game_state
 from func import *
-
-# Constantes
-DIMENSIONES = (800,600)
-FPS_CAP = 60
-TIEMPO_SPAWN_BALA = 400
-TIEMPO_SPAWN_ENEMIGO = 500
-VIDAS_INICIALES = 5
-DURACION_INVULNERABILIDAD = 1000
-MODO_DISPARO = 'enemigo'  # 'circulo': dispara en círculo | 'enemigo': dispara a enemigo más cercano
-MASTER_VOLUME = 0.8
 
 def main():
     """Función principal que inicializa el juego y contiene el loop principal"""
@@ -22,56 +14,44 @@ def main():
 
     # Inicializar el mixer para sonidos
     pygame.mixer.init()
-    pygame.mixer.music.load(os.path.join(RUTA_SONIDOS, "musica_fondo.mp3"))
-    pygame.mixer.music.set_volume(0.2 * MASTER_VOLUME)  # Ajustar volumen de la música
+    pygame.mixer.music.load(os.path.join(game_state.RUTA_SONIDOS, "musica_fondo.mp3"))
+    pygame.mixer.music.set_volume(0.2 * game_state.MASTER_VOLUME)  # Ajustar volumen de la música
     pygame.mixer.music.play(-1)  # Reproducir música en loop
 
     # Cargar efectos de sonido
-    sonido_disparo = pygame.mixer.Sound(os.path.join(RUTA_SONIDOS, "disparo.mp3"))
-    sonido_golpe = pygame.mixer.Sound(os.path.join(RUTA_SONIDOS, "tomato_splat.mp3"))
-    sonido_vida_perdida = pygame.mixer.Sound(os.path.join(RUTA_SONIDOS, "secondary-meow.mp3"))
-
-    sonido_disparo.set_volume(0.7 * MASTER_VOLUME)
-    sonido_golpe.set_volume(0.4 * MASTER_VOLUME)
-    sonido_vida_perdida.set_volume(0.7 * MASTER_VOLUME)
+    sonido_disparo = getSound("disparo.mp3", 0.7 * game_state.MASTER_VOLUME)
+    sonido_golpe = getSound("tomato_splat.mp3", 0.4 * game_state.MASTER_VOLUME)
+    sonido_vida_perdida = getSound("secondary-meow.mp3", 0.7 * game_state.MASTER_VOLUME)
 
     # Crear la pantalla
-    pantalla = pygame.display.set_mode(DIMENSIONES)
+    pantalla = pygame.display.set_mode(game_state.DIMENSIONES)
     pygame.display.set_caption("Pizzer")
 
     # Cargar el icono
-    icono = pygame.image.load(os.path.join(RUTA_IMAGENES, "pizzer.png"))
+    icono = pygame.image.load(os.path.join(game_state.RUTA_IMAGENES, "pizzer.png"))
     pygame.display.set_icon(icono)
 
     # Fondo del juego
-    fondo = pygame.image.load(os.path.join(RUTA_IMAGENES, "fondo.png"))
-    fondo = pygame.transform.scale(fondo, DIMENSIONES)
+    fondo = pygame.image.load(os.path.join(game_state.RUTA_IMAGENES, "fondo.png"))
+    fondo = pygame.transform.scale(fondo, game_state.DIMENSIONES)
 
     # Repartidor
     repartidor = Repartidor()
-    interfaz = Interfaz(DIMENSIONES)
+    interfaz = Interfaz(game_state.DIMENSIONES)
 
     # Lista de enemigos
     enemigos: list[Enemigo] = []
-    tiempo_ultimo_enemigo = 0
 
     # Balas
     balas: list[Bala] = []  # Lista de balas activas
-    tiempo_ultimo_lanzamiento = 0
 
-    # Sistema de vidas
-    vidas = VIDAS_INICIALES
+    # Power-ups
+    power_ups: list[PowerUp] = []
 
-    # Puntaje y tiempo
-    puntaje = 0
-    tiempo_inicio = pygame.time.get_ticks()
+    # Reinicializar estado del juego
+    game_state.reiniciar_juego()
+    game_state.actualizar_tiempo_inicio(pygame.time.get_ticks())
 
-    # Estados del juego
-    ESTADO_JUGANDO = "jugando"
-    ESTADO_TERMINADO = "terminado"
-    estado_juego = ESTADO_JUGANDO
-    tiempo_fin_juego = 0  # Se establece cuando el juego termina
-        
 
     def dibujar_enemigos():
         for enemigo in enemigos:
@@ -80,21 +60,22 @@ def main():
     def generar_enemigo():
         """Crea un nuevo enemigo en un borde aleatorio de la pantalla"""
         borde = random.choice(['top', 'bottom', 'left', 'right'])
+        tipo_enemigo = random.choice([Perro, Gato]) # Elige un tipo de enemigo aleatorio
 
         if borde == 'top':
-            x = random.randint(0, DIMENSIONES[0] - Gato.IMAGEN.get_width())
-            y = -Gato.IMAGEN.get_height()
+            x = random.randint(0, game_state.DIMENSIONES[0] - tipo_enemigo.IMAGEN.get_width())
+            y = -tipo_enemigo.IMAGEN.get_height()
         elif borde == 'bottom':
-            x = random.randint(0, DIMENSIONES[0] - Gato.IMAGEN.get_width())
-            y = DIMENSIONES[1]
+            x = random.randint(0, game_state.DIMENSIONES[0] - tipo_enemigo.IMAGEN.get_width())
+            y = game_state.DIMENSIONES[1]
         elif borde == 'left':
-            x = -Gato.IMAGEN.get_width()
-            y = random.randint(0, DIMENSIONES[1] - Gato.IMAGEN.get_height())
+            x = -tipo_enemigo.IMAGEN.get_width()
+            y = random.randint(0, game_state.DIMENSIONES[1] - tipo_enemigo.IMAGEN.get_height())
         else:  # right
-            x = DIMENSIONES[0]
-            y = random.randint(0, DIMENSIONES[1] - Gato.IMAGEN.get_height())
+            x = game_state.DIMENSIONES[0]
+            y = random.randint(0, game_state.DIMENSIONES[1] - tipo_enemigo.IMAGEN.get_height())
 
-        enemigo = Gato(x, y)
+        enemigo = tipo_enemigo(x, y)
         enemigos.append(enemigo)
 
     def encontrar_enemigo_cercano(x_repartidor, y_repartidor):
@@ -115,6 +96,13 @@ def main():
                 enemigo_cercano = enemigo
 
         return enemigo_cercano
+
+    def generar_power_up():
+        """Crea un nuevo power-up en una posición aleatoria de la pantalla"""
+        x = random.randint(0, game_state.DIMENSIONES[0] - PowerUp.IMAGEN.get_width())
+        y = random.randint(0, game_state.DIMENSIONES[1] - PowerUp.IMAGEN.get_height())
+        power_up = PowerUp(x, y)
+        power_ups.append(power_up)
 
     def lanzar_bala(x_origen, y_origen, x_objetivo, y_objetivo):
         """Crea una bala dirigida hacia el objetivo.
@@ -150,7 +138,7 @@ def main():
             bala.update()
 
             # Verificar si la bala salió de pantalla
-            if bala.is_out_of_bounds(DIMENSIONES):
+            if bala.is_out_of_bounds(game_state.DIMENSIONES):
                 balas_a_eliminar.append(i)
 
         # Eliminar balas fuera de pantalla (en orden inverso para no mover índices)
@@ -162,10 +150,43 @@ def main():
         for bala in balas:
             bala.draw(pantalla)
 
+    def actualizar_power_ups():
+        """Actualiza y elimina power-ups expirados"""
+        power_ups_a_eliminar: list[int] = []
+
+        for i, power_up in enumerate(power_ups):
+            # Verificar si el power-up ha expirado
+            if power_up.is_expired(game_state.TIEMPO_ACTUAL()):
+                power_ups_a_eliminar.append(i)
+
+        # Eliminar power-ups expirados (en orden inverso para no mover índices)
+        for i in sorted(power_ups_a_eliminar, reverse=True):
+            power_ups.pop(i)
+
+    def dibujar_power_ups():
+        """Dibuja todos los power-ups activos"""
+        for power_up in power_ups:
+            power_up.draw(pantalla)
+
+    def detectar_colision_power_up():
+        """Detecta si el repartidor colisiona con un power-up y recupera vidas"""
+        power_ups_sobrevivientes: list[PowerUp] = []
+
+        for power_up in power_ups:
+            if repartidor.rect().colliderect(power_up.rect()):
+                # Colisión con power-up - recuperar vida
+                power_up.play_sfx()
+                if game_state.obtener_vidas() < game_state.VIDAS_INICIALES:
+                    game_state.sumar_vida()  # Recuperar 1 vida (hasta el máximo)
+            else:
+                power_ups_sobrevivientes.append(power_up)
+
+        # Actualizar la lista de power-ups
+        power_ups.clear()
+        power_ups.extend(power_ups_sobrevivientes)
+
     def detectar_colisiones_balas():
         """Detecta colisiones entre balas y enemigos, y elimina ambos si colisionan"""
-        nonlocal puntaje
-
         enemigos_sobrevivientes = list.copy(enemigos)
         balas_sobrevivientes: list[Bala] = []
 
@@ -177,7 +198,7 @@ def main():
                     # Colisión detectada, eliminar ambos
                     enemigos_sobrevivientes.remove(enemigo)
                     colisiono = True
-                    puntaje += 1  # Incrementar puntaje por enemigo eliminado
+                    game_state.sumar_puntos(1)  # Incrementar puntaje por enemigo eliminado
                     sonido_golpe.play()  # Reproducir sonido de golpe
                     break
             if not colisiono:
@@ -191,25 +212,23 @@ def main():
 
     def detectar_colision_repartidor():
         """Detecta si un enemigo colisiona con el repartidor"""
-        nonlocal vidas, estado_juego, tiempo_fin_juego
-
         # Verificar colisión con cada enemigo
         for enemigo in enemigos:
             if not repartidor.es_invulnerable and repartidor.rect().colliderect(enemigo.rect()):
-                vidas -= 1
+                game_state.restar_vida()
                 sonido_vida_perdida.play()  # Reproducir sonido de vida perdida
-                repartidor.apply_invulnerability(tiempo_actual)
+                repartidor.apply_invulnerability()
 
                 # Cambiar estado si no hay más vidas
-                if vidas == 0:
-                    estado_juego = ESTADO_TERMINADO
-                    tiempo_fin_juego = tiempo_actual
+                if game_state.obtener_vidas() == 0:
+                    game_state.cambiar_estado_juego(game_state.ESTADO_TERMINADO)
+                    game_state.establecer_tiempo_fin_juego(game_state.TIEMPO_ACTUAL())
                     pygame.mixer.music.stop()  # Detener música
 
     # Loop de juego
     juego_activo = True
     reloj = pygame.time.Clock()
-    FPS = FPS_CAP
+    FPS = game_state.FPS_CAP
 
     # Generar lista de ángulos y direcciones para disparo circular (8 direcciones)
     num_direcciones = 4
@@ -223,8 +242,8 @@ def main():
         })
 
     while juego_activo:
-        # Contador del tiempo de juego
-        tiempo_actual = pygame.time.get_ticks()
+        # Actualizar el tiempo global del juego
+        game_state.actualizar_tiempo(pygame.time.get_ticks())
 
         for evento in pygame.event.get():
             # Cerrar el juego
@@ -233,60 +252,64 @@ def main():
 
             # Tecla pulsada
             if evento.type == pygame.KEYDOWN:
-                if estado_juego == ESTADO_JUGANDO:
-                    if evento.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
-                        repartidor.handle_key_down(evento.key)
-
+                if game_state.is_jugando():
+                    repartidor.handle_key_down(evento.key)
             # Tecla soltada
             if evento.type == pygame.KEYUP:
-                if estado_juego == ESTADO_JUGANDO:
-                    if evento.key in [pygame.K_LEFT, pygame.K_RIGHT, pygame.K_UP, pygame.K_DOWN]:
-                        repartidor.handle_key_up(evento.key)
+                if game_state.is_jugando():
+                    repartidor.handle_key_up(evento.key)
 
         # Lógica de juego solo si está jugando
-        if estado_juego == ESTADO_JUGANDO:
+        if game_state.is_jugando():
             # Movimiento del enemigo
             x_objetivo_repartidor, y_objetivo_repartidor = repartidor.center()
             for enemigo in enemigos:
                 enemigo.move_towards(x_objetivo_repartidor, y_objetivo_repartidor)
 
             # Generar nuevo enemigo cada intervalo
-            if tiempo_actual - tiempo_ultimo_enemigo >= TIEMPO_SPAWN_ENEMIGO:
+            if game_state.TIEMPO_ACTUAL() - game_state.obtener_tiempo_ultimo_enemigo() >= game_state.TIEMPO_SPAWN_ENEMIGO:
                 generar_enemigo()
-                tiempo_ultimo_enemigo = tiempo_actual
+                game_state.actualizar_tiempo_ultimo_enemigo()
 
             # Lanzar balas cada intervalo
-            if tiempo_actual - tiempo_ultimo_lanzamiento >= TIEMPO_SPAWN_BALA:
+            if game_state.TIEMPO_ACTUAL() - game_state.obtener_tiempo_ultimo_lanzamiento() >= game_state.TIEMPO_SPAWN_BALA:
                 # Origen centrado del repartidor
                 x_origen_centro, y_origen_centro = repartidor.center()
 
-                if MODO_DISPARO == 'circulo':
-                    # Modo circular: disparar en 8 direcciones usando la lista de direcciones
-                    for direccion in direcciones_circulares:
-                        x_objetivo = x_origen_centro + direccion["vx"] * Bala.VELOCIDAD * 10
-                        y_objetivo = y_origen_centro + direccion["vy"] * Bala.VELOCIDAD * 10
-                        lanzar_bala(x_origen_centro, y_origen_centro, x_objetivo, y_objetivo)
+                # Modo enemigo cercano: disparar al enemigo más cercano (usar centros)
+                enemigo_objetivo = encontrar_enemigo_cercano(x_origen_centro, y_origen_centro)
+                if enemigo_objetivo is not None:
+                    x_objetivo, y_objetivo = enemigo_objetivo.center()
+                    lanzar_bala(x_origen_centro, y_origen_centro, x_objetivo, y_objetivo)
 
-                elif MODO_DISPARO == 'enemigo':
-                    # Modo enemigo cercano: disparar al enemigo más cercano (usar centros)
-                    enemigo_objetivo = encontrar_enemigo_cercano(x_origen_centro, y_origen_centro)
-                    if enemigo_objetivo is not None:
-                        x_objetivo, y_objetivo = enemigo_objetivo.center()
-                        lanzar_bala(x_origen_centro, y_origen_centro, x_objetivo, y_objetivo)
-
-                tiempo_ultimo_lanzamiento = tiempo_actual
+                game_state.actualizar_tiempo_ultimo_lanzamiento()
 
             # Actualizar balas
             actualizar_balas()
 
             # Verificar estado de invulnerabilidad
-            repartidor.check_invulnerability(tiempo_actual, DURACION_INVULNERABILIDAD)
+            repartidor.check_invulnerability()
+
+            # Actualizar estado del dash
+            repartidor.update_dash()
+
+            # Generar nuevo power-up cada intervalo
+            if game_state.TIEMPO_ACTUAL() - game_state.obtener_tiempo_ultimo_power_up() >= game_state.obtener_intervalo_power_up():
+                generar_power_up()
+                game_state.actualizar_tiempo_ultimo_power_up()
+                game_state.generar_nuevo_intervalo_power_up()
+
+            # Actualizar power-ups
+            actualizar_power_ups()
 
             # Mover al repartidor
-            repartidor.update(DIMENSIONES)
+            repartidor.update()
 
             # Detectar colisiones
             detectar_colisiones_balas()
+
+            # Detectar colisiones con power-ups
+            detectar_colision_power_up()
 
             # Detectar colisiones con el repartidor
             detectar_colision_repartidor()
@@ -295,7 +318,7 @@ def main():
         pantalla.blit(fondo, (0,0))
 
         # Dibujar al repartidor
-        repartidor.draw(pantalla, tiempo_actual)
+        repartidor.draw(pantalla)
 
         # Dibujar al enemigo
         dibujar_enemigos()
@@ -303,12 +326,28 @@ def main():
         # Dibujar balas
         dibujar_balas()
 
+        # Dibujar power-ups
+        dibujar_power_ups()
+
         # Dibujar interfaz
-        interfaz.dibujar_interfaz_juego(pantalla, vidas, puntaje, tiempo_actual, tiempo_inicio, estado_juego, tiempo_fin_juego, ESTADO_TERMINADO)
+        interfaz.dibujar_interfaz_juego(
+            pantalla,
+            game_state.obtener_vidas(),
+            game_state.obtener_puntaje(),
+            game_state.obtener_estado_juego(),
+            game_state.obtener_tiempo_fin_juego(),
+            game_state.ESTADO_TERMINADO
+        )
 
         # Si el juego terminó, mostrar pantalla de fin
-        if estado_juego == ESTADO_TERMINADO:
-            interfaz.dibujar_pantalla_fin(pantalla, puntaje, tiempo_actual, tiempo_inicio, tiempo_fin_juego, estado_juego, ESTADO_TERMINADO)
+        if game_state.is_terminado():
+            interfaz.dibujar_pantalla_fin(
+                pantalla,
+                game_state.obtener_puntaje(),
+                game_state.obtener_tiempo_fin_juego(),
+                game_state.obtener_estado_juego(),
+                game_state.ESTADO_TERMINADO
+            )
 
         # Actualizar la pantalla
         pygame.display.update()
@@ -317,6 +356,7 @@ def main():
         reloj.tick(FPS)
 
 if __name__ == "__main__":
+    game_state.variables_check_juego()
     main()
 
 # En este código se han realizado las siguientes mejoras:

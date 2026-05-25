@@ -3,7 +3,7 @@ from func import *
 
 class Enemigo:
     """Clase base de enemigo que contiene atributos y comportamiento comunes."""
-        
+
     def __init__(self, x, y, img: pygame.Surface, vel:int):
         self.x = x
         self.y = y
@@ -28,9 +28,16 @@ class Enemigo:
             self.y += (dy / distancia) * self.vel
 
 
+class Perro(Enemigo):
+    IMAGEN = getImage("dog.png", (70, 40)) # Imagen por defecto, se puede sobrescribir
+    VELOCIDAD = 2
+
+    def __init__(self, x, y, img: pygame.Surface | None = None, vel: int | None = None):
+        super().__init__(x, y, img if img is not None else self.IMAGEN, vel if vel is not None else self.VELOCIDAD)
+
 class Gato(Enemigo):
-    IMAGEN = getImage("gatotomate.png", (70, 70)) # Imagen por defecto, se puede sobrescribir
-    VELOCIDAD = 3
+    IMAGEN = getImage("gatotomate.png", (40, 40)) # Imagen por defecto, se puede sobrescribir
+    VELOCIDAD = 4
 
     def __init__(self, x, y, img: pygame.Surface | None = None, vel: int | None = None):
         super().__init__(x, y, img if img is not None else self.IMAGEN, vel if vel is not None else self.VELOCIDAD)

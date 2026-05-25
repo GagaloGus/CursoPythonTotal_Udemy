@@ -1,4 +1,5 @@
 import pygame
+from game_state import TIEMPO_ACTUAL, TIEMPO_INICIO
 from func import *
 
 
@@ -11,11 +12,11 @@ class Interfaz:
         self.fuente = pygame.font.SysFont(None, 36)
         self.fuente_grande = pygame.font.SysFont(None, 80)
 
-    def dibujar_interfaz_juego(self, superficie: pygame.Surface, vidas: int, puntaje: int, tiempo_actual: int, tiempo_inicio: int, estado_juego: str, tiempo_fin_juego: int, estado_terminado: str):
+    def dibujar_interfaz_juego(self, superficie: pygame.Surface, vidas: int, puntaje: int, estado_juego: str, tiempo_fin_juego: int, estado_terminado: str):
         """Dibuja la interfaz durante el juego."""
         self.dibujar_vidas(superficie, vidas)
         self.dibujar_puntaje(superficie, puntaje)
-        self.dibujar_cronometro(superficie, tiempo_actual, tiempo_inicio, estado_juego, tiempo_fin_juego, estado_terminado)
+        self.dibujar_cronometro(superficie, estado_juego, tiempo_fin_juego, estado_terminado)
 
 
     def dibujar_vidas(self, superficie: pygame.Surface, vidas: int):
@@ -28,27 +29,24 @@ class Interfaz:
         texto_puntaje = self.fuente.render(f"Puntos: {puntaje}", True, (255, 255, 255))
         superficie.blit(texto_puntaje, (self.dimensiones[0] - texto_puntaje.get_width() - 10, 10))
 
-    def calcular_tiempo_transcurrido(self, tiempo_actual: int, tiempo_inicio: int,
+    def calcular_tiempo_transcurrido(self,
                                     estado_juego: str, tiempo_fin_juego: int,
                                     estado_terminado: str) -> str:
         """Calcula el tiempo transcurrido en formato M:SS."""
         if estado_juego == estado_terminado:
-            tiempo_ms = tiempo_fin_juego - tiempo_inicio
+            tiempo_ms = tiempo_fin_juego - TIEMPO_INICIO()
         else:
-            tiempo_ms = tiempo_actual - tiempo_inicio
+            tiempo_ms = TIEMPO_ACTUAL() - TIEMPO_INICIO()
 
         segundos_totales = tiempo_ms // 1000
         minutos = segundos_totales // 60
         segundos = segundos_totales % 60
         return f"{minutos}:{segundos:02d}"
 
-    def dibujar_cronometro(self, superficie: pygame.Surface, tiempo_actual: int,
-                          tiempo_inicio: int, estado_juego: str,
+    def dibujar_cronometro(self, superficie: pygame.Surface, estado_juego: str,
                           tiempo_fin_juego: int, estado_terminado: str):
         """Dibuja el cronómetro en la parte superior central."""
         tiempo_str = self.calcular_tiempo_transcurrido(
-            tiempo_actual,
-            tiempo_inicio,
             estado_juego,
             tiempo_fin_juego,
             estado_terminado,
@@ -58,7 +56,6 @@ class Interfaz:
         superficie.blit(texto_tiempo, (x, 10))
 
     def dibujar_pantalla_fin(self, superficie: pygame.Surface, puntaje: int,
-                            tiempo_actual: int, tiempo_inicio: int,
                             tiempo_fin_juego: int, estado_juego: str,
                             estado_terminado: str):
         """Dibuja la pantalla de fin de juego con puntaje y tiempo."""
@@ -76,8 +73,6 @@ class Interfaz:
         superficie.blit(texto_puntaje_final, (x_puntaje, self.dimensiones[1] // 2 + 50))
 
         tiempo_str = self.calcular_tiempo_transcurrido(
-            tiempo_actual,
-            tiempo_inicio,
             estado_juego,
             tiempo_fin_juego,
             estado_terminado,

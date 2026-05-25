@@ -1,5 +1,7 @@
 import pygame
+import math
 from func import *
+import game_state
 
 
 class Repartidor:
@@ -24,8 +26,18 @@ class Repartidor:
             'DOWN': False
         }
 
+        # Sistema de dash
+        self.en_dash = False
+        self.tiempo_inicio_dash = 0
+        self.duracion_dash = 250  # 250ms de dash (más corto)
+        self.velocidad_dash = 25  # Velocidad durante el dash (más rápida)
+        self.tiempo_ultimo_dash = 0
+        self.cooldown_dash = 2000  # 2 segundos de cooldown
+        self.direccion_dash_x = 0
+        self.direccion_dash_y = 0
+
     def handle_key_down(self, key):
-        """Procesa cuando se presiona una tecla de dirección"""
+        """Procesa cuando se presiona una tecla"""
         if key == pygame.K_LEFT:
             self.teclas_presionadas['LEFT'] = True
             self.cambio_x = -self.vel
@@ -38,9 +50,12 @@ class Repartidor:
         elif key == pygame.K_DOWN:
             self.teclas_presionadas['DOWN'] = True
             self.cambio_y = self.vel
+        elif key == pygame.K_SPACE:
+            # Iniciar dash
+            self.iniciar_dash()
 
     def handle_key_up(self, key):
-        """Procesa cuando se suelta una tecla de dirección"""
+        """Procesa cuando se suelta una tecla"""
         if key == pygame.K_LEFT:
             self.teclas_presionadas['LEFT'] = False
             # Solo poner cambio_x a 0 si no hay otra tecla horizontal presionada
@@ -67,12 +82,12 @@ class Repartidor:
                 self.cambio_y = 0
             else:
                 self.cambio_y = -self.vel
-                
-    def draw(self, superficie: pygame.Surface, tiempo_actual: int):
+
+    def draw(self, superficie: pygame.Surface):
         """Dibuja al repartidor con efecto de parpadeo si está invulnerable"""
         if self.es_invulnerable:
             # Calcular tiempo transcurrido desde el último golpe
-            tiempo_transcurrido = tiempo_actual - self.tiempo_ultimo_golpe
+            tiempo_transcurrido = game_state.TIEMPO_ACTUAL() - self.tiempo_ultimo_golpe
             # Crear efecto de parpadeo: alterna visibilidad cada 100 ms
             if (tiempo_transcurrido // 100) % 2 == 0:
                 superficie.blit(self.img, (self.x, self.y))
@@ -92,31 +107,70 @@ class Repartidor:
         self.cambio_x = cambio_x
         self.cambio_y = cambio_y
 
-    def update(self, dimensiones: tuple[int, int]):
+    def update(self):
         """Actualiza la posición del repartidor y aplica límites de pantalla"""
-        self.x += self.cambio_x
-        self.y += self.cambio_y
+        # Durante el dash, usar velocidad de dash en la dirección del dash
+        if self.en_dash:
+            self.x += self.direccion_dash_x * self.velocidad_dash
+            self.y += self.direccion_dash_y * self.velocidad_dash
+        else:
+            # Movimiento normal
+            self.x += self.cambio_x
+            self.y += self.cambio_y
 
         # Evitar que el repartidor salga de la pantalla
         if self.x < 0:
             self.x = 0
         if self.y < 0:
             self.y = 0
-        if self.x > dimensiones[0] - self.img.get_width():
-            self.x = dimensiones[0] - self.img.get_width()
-        if self.y > dimensiones[1] - self.img.get_height():
-            self.y = dimensiones[1] - self.img.get_height()
+        if self.x > game_state.DIMENSIONES[0] - self.img.get_width():
+            self.x = game_state.DIMENSIONES[0] - self.img.get_width()
+        if self.y > game_state.DIMENSIONES[1] - self.img.get_height():
+            self.y = game_state.DIMENSIONES[1] - self.img.get_height()
 
     def reset(self):
         """Reinicia la posición del repartidor a la posición inicial"""
         self.x, self.y = self.POSICION_INICIAL
 
-    def apply_invulnerability(self, tiempo_actual: int):
+    def apply_invulnerability(self):
         """Aplica el estado de invulnerabilidad al repartidor"""
         self.es_invulnerable = True
-        self.tiempo_ultimo_golpe = tiempo_actual
+        self.tiempo_ultimo_golpe = game_state.TIEMPO_ACTUAL()
 
-    def check_invulnerability(self, tiempo_actual: int, duracion: int):
+    def check_invulnerability(self):
         """Verifica si el tiempo de invulnerabilidad ha expirado"""
-        if self.es_invulnerable and tiempo_actual - self.tiempo_ultimo_golpe >= duracion:
+        if self.es_invulnerable and game_state.TIEMPO_ACTUAL() - self.tiempo_ultimo_golpe >= game_state.DURACION_INVULNERABILIDAD:
             self.es_invulnerable = False
+
+    def iniciar_dash(self):
+        """Inicia un dash en la dirección actual del movimiento"""
+        # Verificar si el dash está disponible (ha pasado el cooldown)
+        if game_state.TIEMPO_ACTUAL() - self.tiempo_ultimo_dash < self.cooldown_dash:
+            return False
+
+        # Verificar que hay una dirección de movimiento
+        if self.cambio_x == 0 and self.cambio_y == 0:
+            return False
+
+        # Iniciar dash
+        self.en_dash = True
+        self.tiempo_inicio_dash = game_state.TIEMPO_ACTUAL()
+        self.tiempo_ultimo_dash = game_state.TIEMPO_ACTUAL()
+
+        # Normalizar la dirección del dash
+        distancia = math.hypot(self.cambio_x, self.cambio_y)
+        self.direccion_dash_x = self.cambio_x / distancia
+        self.direccion_dash_y = self.cambio_y / distancia
+
+        # Aplicar invulnerabilidad durante el dash
+        self.apply_invulnerability()
+
+        return True
+
+    def update_dash(self):
+        """Actualiza el estado del dash"""
+        if self.en_dash:
+            tiempo_transcurrido = game_state.TIEMPO_ACTUAL() - self.tiempo_inicio_dash
+            if tiempo_transcurrido >= self.duracion_dash:
+                # Terminar dash
+                self.en_dash = False

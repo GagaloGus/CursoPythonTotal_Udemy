@@ -10,7 +10,7 @@ libros_destacados = []
 # Contador de páginas
 page_counter = 1
 
-# Bucle para recorrer todas las paginas empezando desde la página 1 hasta que de error al acceder a una página (status code != 200)
+# Bucle para recorrer todas las paginas empezando desde la página 1 hasta que de error al acceder a una página o status code != 200
 while True:
     try:
         url = base_url.format(page_counter)
@@ -29,9 +29,10 @@ while True:
         for libro in libros:
             # Encontrar el div con la clase star-rating
             rating_div = libro.find('p', class_='star-rating')
+            clases_rating = list(rating_div.get('class')) if rating_div else [] # type: ignore
 
             # Verificar si el rating es Four o Five
-            if rating_div and any(rating in str(rating_div.get('class', [])) for rating in ['Four', 'Five']):
+            if 'Four' in clases_rating or 'Five' in clases_rating:
                 # Extraer el título del libro
                 h3 = libro.find('h3')
                 titulo_link = h3.find('a') if h3 else None
